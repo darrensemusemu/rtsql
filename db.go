@@ -1,6 +1,13 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+)
+
+type Repository interface {
+	Ready() bool
+	OnUpdate() error
+}
 
 type dbType string
 

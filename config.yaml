@@ -1,0 +1,7 @@
+migrations: rtsql_migrations
+tables:
+  - name: user
+    on: [after_insert]
+    actions:
+      - to: stderr
+        content_type: json
