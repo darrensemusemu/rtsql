@@ -1,17 +1,21 @@
 package main
 
 import (
+	"context"
 	"fmt"
 )
 
 type Repository interface {
-	Ready() bool
+	Ready(context.Context) bool
+	AddTrigger(ctx context.Context, name string) error
+	RemoveTrigger(ctx context.Context) error
 	OnUpdate() error
+	Listen(ctx context.Context, channel string) error
 }
 
 type dbType string
 
-var (
+const (
 	postresDb   dbType = "postgres"
 	sqliteDb    dbType = "sqlite"
 	sqlServerDb dbType = "sqlserver"
@@ -33,3 +37,9 @@ func (db *dbType) Set(v string) error {
 func (db *dbType) String() string {
 	return string(*db)
 }
+
+type dbOnType string
+
+const (
+	dbOnAfterInsert dbOnType = "after_insert"
+)
