@@ -51,6 +51,7 @@ func run(cfg config) error {
 	if err != nil {
 		return err
 	}
+	defer repo.Close()
 
 	// load config file
 	configContents, err := os.ReadFile(cfg.configPath)
@@ -64,6 +65,7 @@ func run(cfg config) error {
 
 	errCh := make(chan error)
 
+	// listen for triggers
 	go func() {
 		if listenErr := repo.Listen(ctx, rtsql_channel); listenErr != nil {
 			errCh <- listenErr
@@ -71,6 +73,7 @@ func run(cfg config) error {
 		}
 	}()
 
+	// http server
 	go func() {
 		x := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			fmt.Fprintf(w, "DB ready:  %v\n", repo.Ready(ctx))

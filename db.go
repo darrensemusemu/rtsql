@@ -11,6 +11,7 @@ type Repository interface {
 	RemoveTrigger(ctx context.Context) error
 	OnUpdate() error
 	Listen(ctx context.Context, channel string) error
+	Close() error
 }
 
 type dbType string

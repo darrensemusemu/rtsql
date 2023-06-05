@@ -6,7 +6,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
 )
 
@@ -18,7 +17,6 @@ const (
 var dbReady = false // FIXME: probably not safe for use by mutiple go routines
 
 type postgresDB struct {
-	db         *sqlx.DB
 	pqListener *pq.Listener
 }
 
@@ -40,7 +38,7 @@ func (p *postgresDB) Listen(ctx context.Context, channel string) error {
 	for {
 		select {
 		case notication := <-p.pqListener.Notify:
-			fmt.Printf("received: %v\n", notication)
+			fmt.Printf("received: %+v\n", notication)
 			break
 		}
 	}
@@ -60,6 +58,11 @@ func (p *postgresDB) Ready(ctx context.Context) bool {
 
 func (p *postgresDB) OnUpdate() error {
 	panic("postres onupdate func: not implemented")
+}
+
+func (p *postgresDB) Close() error {
+	err := p.pqListener.Close()
+	return err
 }
 
 func pqListerCallback(event pq.ListenerEventType, err error) {
