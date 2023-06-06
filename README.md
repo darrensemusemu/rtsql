@@ -18,7 +18,7 @@ Run go program
 go run ./...
 ```
 
-Insert data into users table and . Optional just run `quickstart/postgres/insert-users.sql`.
+Insert data into users table, optionally just run `quickstart/postgres/insert-users.sql`.
 
 ```sql
 insert into "user"("email")	values('john'),
