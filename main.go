@@ -2,11 +2,13 @@ package main
 
 import (
 	"context"
-	"errors"
 	"flag"
 	"fmt"
 	"net/http"
 	"os"
+	"time"
+
+	_ "github.com/lib/pq"
 
 	"gopkg.in/yaml.v3"
 )
@@ -18,7 +20,7 @@ type config struct {
 }
 
 const (
-	rtsql_channel = "rtsql_user"
+	rtsql_channel = "rtsql_event_channel"
 )
 
 func main() {
@@ -37,35 +39,16 @@ func main() {
 
 func run(cfg config) error {
 	ctx := context.Background()
+	errCh := make(chan error)
 
-	var repo Repository
-	var err error
-
-	// connect db
-	switch cfg.dbType {
-	case postresDb:
-		repo = NewPostgresDB(cfg.dbConn)
-	default:
-		return fmt.Errorf("unsupported db: %s\n", cfg.dbType)
-	}
+	// setup db
+	repo, err := setupRepo(cfg)
 	if err != nil {
 		return err
 	}
 	defer repo.Close()
 
-	// load config file
-	configContents, err := os.ReadFile(cfg.configPath)
-	if err != nil {
-		return err
-	}
-	var model ConfigModel
-	if err := yaml.Unmarshal(configContents, &model); err != nil {
-		return err
-	}
-
-	errCh := make(chan error)
-
-	// listen for triggers
+	//
 	go func() {
 		if listenErr := repo.Listen(ctx, rtsql_channel); listenErr != nil {
 			errCh <- listenErr
@@ -73,15 +56,21 @@ func run(cfg config) error {
 		}
 	}()
 
-	// http server
 	go func() {
-		x := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			fmt.Fprintf(w, "DB ready:  %v\n", repo.Ready(ctx))
-		})
-		fmt.Printf("Listening on port 8080\n")
-		http.ListenAndServe(":8080", x)
+		if errConf := runConfig(ctx, cfg.configPath, repo); errConf != nil {
+			errCh <- errConf
+			close(errCh)
+		}
 	}()
 
+	go func() {
+		fmt.Printf("Listening on port 8080\n")
+		http.ListenAndServe(":8080", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprintf(w, "DB ready:  %v\n", repo.Ready(ctx))
+		}))
+	}()
+
+	// err checking goroutines
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -92,21 +81,48 @@ func run(cfg config) error {
 	return err
 }
 
-func parseConfigModel(model ConfigModel) error {
-	if model.Migrations == "" {
-		return errors.New("parse config-model error: migrations table not specified")
+func setupRepo(cfg config) (repo Repository, err error) {
+	switch cfg.dbType {
+	case postresDb:
+		repo = NewPostgresDB(cfg.dbConn)
+	default:
+		return repo, fmt.Errorf("unsupported db: %s\n", cfg.dbType)
 	}
 
-	// FIXME: handle other dbs
+	return repo, err
+}
+
+func runConfig(ctx context.Context, path string, repo Repository) error {
+	configContents, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	var model ConfigModel
+	if err := yaml.Unmarshal(configContents, &model); err != nil {
+		return err
+	}
+
+	backoff := time.Second // TODO: implment a time out flag
+	for {
+		if repo.Ready(ctx) {
+			break
+		}
+		time.Sleep(backoff)
+		backoff = backoff << 1
+	}
+
 	for _, m := range model.Tables {
-		_ = m.Name
+		err := repo.AddTrigger(ctx, m) // TODO: support other actions e.g. on update
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
 }
 
 type ConfigModel struct {
-	Migrations string             `yaml:"migrations"` // TODO: handle migrations
+	Migrations string             `yaml:"migrations"` // TODO: handle migrations & validate fields
 	Tables     []ConfigModelTable `yaml:"tables"`
 }
 

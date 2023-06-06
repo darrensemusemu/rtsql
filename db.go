@@ -7,7 +7,7 @@ import (
 
 type Repository interface {
 	Ready(context.Context) bool
-	AddTrigger(ctx context.Context, name string) error
+	AddTrigger(ctx context.Context, cfg ConfigModelTable) error
 	RemoveTrigger(ctx context.Context) error
 	OnUpdate() error
 	Listen(ctx context.Context, channel string) error
